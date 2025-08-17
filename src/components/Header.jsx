@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { getCookie, setCookie } from '@/utils/cookies';
+import { setCookie } from '@/utils/cookies';
+import Breadcrumbs from '@/components/Breadcrumbs';
 
 const MENU = [
   { href: '/', label: 'Home' },
@@ -19,77 +20,127 @@ export default function Header() {
   const [theme, setTheme] = useState('light');
   const pathname = usePathname();
   const btnRef = useRef(null);
+  const firstLinkRef = useRef(null);
 
-  // Persist/restore theme
+  // Theme init
   useEffect(() => {
-    const saved = localStorage.getItem('theme') || 'light';
+    const saved = (typeof window !== 'undefined' && localStorage.getItem('theme')) || 'light';
     setTheme(saved);
-    document.documentElement.setAttribute('data-theme', saved);
+    if (typeof document !== 'undefined') document.documentElement.setAttribute('data-theme', saved);
   }, []);
+
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
     setTheme(next);
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('theme', next);
+    if (typeof document !== 'undefined') document.documentElement.setAttribute('data-theme', next);
+    if (typeof window !== 'undefined') localStorage.setItem('theme', next);
   };
 
-  // Save active menu to cookie for breadcrumb memory
+  // Remember active menu for breadcrumbs (cookie)
   useEffect(() => {
-    const active = MENU.find(m => m.href === pathname)?.label ?? 'Home';
+    const active = (MENU.find(m => m.href === pathname) || MENU[0]).label;
     setCookie('activeMenu', active, 30);
   }, [pathname]);
 
-  // Close menu on route change (desktop-friendly)
+  // Close drawer on route change
   useEffect(() => { setOpen(false); }, [pathname]);
 
-  // Basic ESC key handling for the menu button
+  // ESC closes drawer
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') { setOpen(false); btnRef.current?.focus(); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Focus first link when drawer opens; lock body scroll
+  useEffect(() => {
+    if (open) {
+      firstLinkRef.current?.focus();
+      if (typeof document !== 'undefined') document.body.style.overflow = 'hidden';
+    } else {
+      if (typeof document !== 'undefined') document.body.style.overflow = '';
+    }
+  }, [open]);
+
   return (
-    <header className="header" role="banner">
-      <div className="header-inner">
-        <div className="brand">
-          <span className="student-id" aria-label="Student Number">21819446</span>
-          <span aria-hidden="true">|</span>
-          <Link href="/" aria-label="Site home">CWA Assignment</Link>
-        </div>
+    <>
+      <header className="header" role="banner">
+        <div className="header-inner header-grid">
+          {/* Left: hamburger + student number (top-left) */}
+          <div className="header-left">
+            <button
+              ref={btnRef}
+              className="burger"
+              data-open={open ? 'true' : 'false'}
+              aria-expanded={open}
+              aria-controls="site-drawer"
+              aria-label={open ? 'Close navigation menu' : 'Open navigation menu'}
+              onClick={() => setOpen(v => !v)}
+            >
+              <span className="burger-line" />
+              <span className="burger-line" />
+              <span className="burger-line" />
+            </button>
+            <span className="student-id" aria-label="Student Number">21819446</span>
+          </div>
 
-        <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
-          <button
-            ref={btnRef}
-            className="nav-toggle"
-            aria-expanded={open}
-            aria-controls="primary-navigation"
-            aria-label="Toggle navigation menu"
-            onClick={() => setOpen(v => !v)}
-          >
-            ☰ Menu
-          </button>
-          <button
-            className="nav-toggle"
-            onClick={toggleTheme}
-            aria-label={`Activate ${theme === 'dark' ? 'light' : 'dark'} mode`}
-          >
-            {theme === 'dark' ? '🌙 Dark' : '☀️ Light'}
-          </button>
-        </div>
-      </div>
+          {/* Centre: title */}
+          <div className="header-center">
+            <Link href="/" className="site-title" aria-label="Site home">
+              CSE3CWA Assignment 1
+            </Link>
+          </div>
 
-      <nav id="primary-navigation" className={`nav ${open ? 'open' : ''}`} aria-label="Primary">
-        <ul>
-          {MENU.map(m => (
-            <li key={m.href}>
-              <Link href={m.href} aria-current={pathname === m.href ? 'page' : undefined}>
-                {m.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </nav>
-    </header>
+          {/* Right: theme toggle */}
+          <div className="header-right">
+            <button
+              className="nav-toggle"
+              onClick={toggleTheme}
+              aria-label={`Activate ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              title="Toggle theme"
+            >
+              {theme === 'dark' ? '🌙' : '☀️'}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Backdrop */}
+      <div
+        className={`backdrop ${open ? 'show' : ''}`}
+        onClick={() => setOpen(false)}
+        aria-hidden={!open}
+      />
+
+      {/* Slide-in drawer */}
+      <aside
+        id="site-drawer"
+        className={`drawer ${open ? 'open' : ''}`}
+        aria-label="Primary navigation"
+      >
+        {/* Breadcrumbs under the hamburger icon (hidden on /) */}
+        <Breadcrumbs variant="drawer" />
+
+        <nav>
+          <ul className="drawer-list">
+            {MENU.map((m, i) => {
+              const isActive = pathname === m.href;
+              return (
+                <li key={m.href}>
+                  <Link
+                    ref={i === 0 ? firstLinkRef : null}
+                    href={m.href}
+                    aria-current={isActive ? 'page' : undefined}
+                    onClick={() => setOpen(false)}
+                  >
+                    {m.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      </aside>
+    </>
   );
 }
