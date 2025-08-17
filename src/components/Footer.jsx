@@ -5,7 +5,7 @@ export default function Footer() {
   return (
     <footer className="footer" role="contentinfo">
       <div className="footer-inner">
-        <div>© {new Date().getFullYear()} Angus Arthur — Student No. 21819446 — {today}</div>
+        <div>©Angus Arthur (21819446) {new Date().getFullYear()}. All rights reserved. </div>
       </div>
     </footer>
   );
