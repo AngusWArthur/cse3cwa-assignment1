@@ -3,11 +3,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { getCookie } from '@/utils/cookies';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 function labelFor(segment) {
   const map = {
-    '': 'CSE3CWA Home',
+    '': 'Home',
     'about': 'About',
     'tabs': 'Tabs',
     'escape-room': 'Escape Room',
@@ -19,22 +19,28 @@ function labelFor(segment) {
 
 export default function Breadcrumbs({ variant = 'default' }) {
   const pathname = usePathname() || '/';
+  const isHome = pathname === '/';
 
-  // Hide breadcrumbs on the home page
-  if (pathname === '/') return null;
-
-  const segments = pathname.split('/');
+  // Hooks must be called unconditionally (same order each render)
   const [lastTab, setLastTab] = useState('');
 
   useEffect(() => {
     setLastTab(decodeURIComponent(getCookie('activeMenu') || ''));
   }, [pathname]);
 
-  const crumbs = segments.map((seg, idx) => {
-    const href = '/' + segments.slice(1, idx + 1).join('/');
-    const isLast = idx === segments.length - 1;
-    return { href: idx === 0 ? '/' : href, label: labelFor(seg), isLast };
-  }).filter(c => !(c.href !== '/' && c.label === ''));
+  const crumbs = useMemo(() => {
+    const segments = pathname.split('/');
+    return segments
+      .map((seg, idx) => {
+        const href = '/' + segments.slice(1, idx + 1).join('/');
+        const isLast = idx === segments.length - 1;
+        return { href: idx === 0 ? '/' : href, label: labelFor(seg), isLast };
+      })
+      .filter(c => !(c.href !== '/' && c.label === ''));
+  }, [pathname]);
+
+  // Decide to render nothing for home AFTER hooks are declared
+  if (isHome) return null;
 
   const containerStyle =
     variant === 'drawer'
@@ -43,7 +49,7 @@ export default function Breadcrumbs({ variant = 'default' }) {
 
   return (
     <nav aria-label="Breadcrumb" style={containerStyle}>
-      <ol style={{display:'flex', gap: '8px', listStyle:'none', padding:0, margin:0}}>
+      <ol style={{display:'flex', gap:'8px', listStyle:'none', padding:0, margin:0}}>
         {crumbs.map((c, i) => (
           <li key={i}>
             {c.isLast ? (
