@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { toCssOnlyInteractiveHtml, textToHtml } from '@/lib/tabsExport';
 
 type Tab = { id: number; title: string; content: string };
 
@@ -24,24 +25,8 @@ function isTabArray(arr: unknown): arr is Tab[] {
   return Array.isArray(arr) && arr.every(isTab);
 }
 
-/* ---------- Helpers ---------- */
+/* ---------- LocalStorage bootstrap ---------- */
 
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, (m) =>
-    m === '&' ? '&amp;' :
-    m === '<' ? '&lt;' :
-    m === '>' ? '&gt;' :
-    m === '"' ? '&quot;' :
-    '&#39;'
-  );
-}
-
-/** Render plain text content to HTML with <br> for line breaks */
-function textToHtml(s: string) {
-  return escapeHtml(s).replace(/\r?\n/g, '<br>');
-}
-
-/** Load initial tabs from localStorage synchronously (with legacy key fallback) */
 function loadInitialTabs(): Tab[] {
   const fallback: Tab[] = [
     { id: 1, title: 'Overview', content: 'Welcome to the tabs demo.\nAdd more tabs and content.' },
@@ -77,101 +62,6 @@ function loadInitialTabs(): Tab[] {
   return fallback;
 }
 
-/**
- * Generate a standalone CSS-only interactive HTML document using radio+label technique.
- * No classes are used; selectors rely on element/attribute/ID only.
- */
-function toCssOnlyInteractiveHtml(
-  tabs: { title: string; content: string }[]
-): string {
-  const uid = 'tabs-' + Math.random().toString(36).slice(2);
-  const listId = `${uid}-list`;
-
-  const baseCss = `
-#${uid} { margin:16px }
-#${uid} [role="tablist"] { display:flex; gap:8px; flex-wrap:wrap }
-#${uid} input[type="radio"] { position:absolute; opacity:0; width:1px; height:1px; } /* keep focusable */
-#${uid} label[for] { padding:8px 12px; border:1px solid #0003; border-radius:8px; cursor:pointer }
-#${uid} [role="tabpanel"] { display:none; margin-top:12px; padding:12px; border:1px solid #0002; border-radius:8px }
-`.trim();
-
-  const activeLabelRules = tabs
-    .map((_, i) =>
-      `#${uid}-tab-${i}:checked ~ #${listId} label[for="${uid}-tab-${i}"] { border-bottom:2px solid #0a66c2 }`
-    )
-    .join('\n');
-
-  // Focus outline on the associated label when the hidden radio is focused
-  const focusLabelRules = tabs
-    .map((_, i) =>
-      `#${uid}-tab-${i}:focus ~ #${listId} label[for="${uid}-tab-${i}"] { outline:2px solid #ffbf47; outline-offset:2px }`
-    )
-    .join('\n');
-
-  const panelVisibilityRules = tabs
-    .map((_, i) =>
-      `#${uid}-tab-${i}:checked ~ #${uid}-panel-${i} { display:block }`
-    )
-    .join('\n');
-
-  const styleTag = `<style>
-${baseCss}
-${activeLabelRules}
-${focusLabelRules}
-${panelVisibilityRules}
-</style>`;
-
-  // radios first (siblings of list and panels)
-  const radios = tabs
-    .map((_, i) => {
-      const checked = i === 0 ? ' checked' : '';
-      return `  <input type="radio" name="${uid}-set" id="${uid}-tab-${i}"${checked} aria-controls="${uid}-panel-${i}" />`;
-    })
-    .join('\n');
-
-  // labels inside the tablist
-  const labels = tabs
-    .map((t, i) => {
-      const title = escapeHtml(t.title || `Tab ${i + 1}`);
-      return `      <label for="${uid}-tab-${i}" role="tab" aria-controls="${uid}-panel-${i}">${title}</label>`;
-    })
-    .join('\n');
-
-  // panels as siblings of radios and list
-  const panels = tabs
-    .map(
-      (t, i) => `  <section id="${uid}-panel-${i}" role="tabpanel" aria-labelledby="${uid}-tab-${i}">
-    ${textToHtml(t.content || '')}
-  </section>`
-    )
-    .join('\n\n');
-
-  const markup = [
-    `<div id="${uid}" role="region" aria-label="Tabs">`,
-    radios,
-    `  <div role="tablist" aria-label="Tabs" id="${listId}">`,
-    labels,
-    `  </div>`,
-    panels,
-    `</div>`,
-  ].join('\n');
-
-  return [
-    '<!doctype html>',
-    '<html lang="en">',
-    '<head>',
-    '  <meta charset="utf-8">',
-    '  <meta name="viewport" content="width=device-width, initial-scale=1">',
-    '  <title>Tabs</title>',
-    styleTag,
-    '</head>',
-    '<body>',
-    markup,
-    '</body>',
-    '</html>',
-  ].join('\n');
-}
-
 /* ---------- Page Component ---------- */
 
 export default function TabsPage() {
@@ -182,12 +72,12 @@ export default function TabsPage() {
   const [active, setActive] = useState(0);
   const [copied, setCopied] = useState(false);
 
-  // New: Save-to-DB UI state
+  // Save-to-DB UI state
   const [saveTitle, setSaveTitle] = useState<string>('');
   const [saving, setSaving] = useState<boolean>(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
-  // Save to localStorage on change
+  // Persist to localStorage on change
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tabs)); } catch {}
   }, [tabs]);
