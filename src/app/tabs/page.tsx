@@ -8,6 +8,22 @@ const MAX_TABS = 15;
 const STORAGE_KEY = 'tabs_builder_v4';
 const LEGACY_KEYS = ['tabs_builder_v3', 'tabs_builder_v2'];
 
+/* ---------- Type Guards ---------- */
+
+function isTab(obj: unknown): obj is Tab {
+  if (typeof obj !== 'object' || obj === null) return false;
+  const o = obj as Record<string, unknown>;
+  return (
+    typeof o.id === 'number' &&
+    typeof o.title === 'string' &&
+    typeof o.content === 'string'
+  );
+}
+
+function isTabArray(arr: unknown): arr is Tab[] {
+  return Array.isArray(arr) && arr.every(isTab);
+}
+
 /* ---------- Helpers ---------- */
 
 function escapeHtml(s: string) {
@@ -37,8 +53,8 @@ function loadInitialTabs(): Tab[] {
   if (raw) {
     try {
       const arr: unknown = JSON.parse(raw);
-      if (Array.isArray(arr) && arr.every(x => typeof (x as any)?.id === 'number')) {
-        const trimmed = (arr as Tab[]).slice(0, MAX_TABS);
+      if (isTabArray(arr)) {
+        const trimmed = arr.slice(0, MAX_TABS);
         return trimmed.length ? trimmed : fallback;
       }
     } catch { /* ignore */ }
@@ -50,8 +66,8 @@ function loadInitialTabs(): Tab[] {
     if (!legacy) continue;
     try {
       const arr: unknown = JSON.parse(legacy);
-      if (Array.isArray(arr) && arr.every(x => typeof (x as any)?.id === 'number')) {
-        const trimmed = (arr as Tab[]).slice(0, MAX_TABS);
+      if (isTabArray(arr)) {
+        const trimmed = arr.slice(0, MAX_TABS);
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed)); // migrate forward
         return trimmed.length ? trimmed : fallback;
       }
