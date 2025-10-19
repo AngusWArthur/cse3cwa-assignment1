@@ -272,7 +272,7 @@ export default function TabsPage() {
       }
 
       const created: CreateResponse = await res.json();
-      setSaveMsg(`Saved! id=${created.id}`);
+      setSaveMsg(`Saved! Database record id=${created.id} created.`);
       setSaveTitle('');
     } catch (e) {
       setSaveMsg(`Save failed: ${String(e)}`);
