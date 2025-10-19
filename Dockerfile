@@ -1,43 +1,50 @@
-# -------- Dependencies layer --------
+# -------- Deps layer --------
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-# Install deps (cached if package*.json unchanged)
+# Skip Prisma postinstall during this layer so "prisma generate" doesn’t run yet
+ENV PRISMA_SKIP_POSTINSTALL=1
+
+# Install deps (cache on package files)
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev=false
+RUN npm ci
 
 # -------- Builder layer --------
 FROM node:20-alpine AS builder
 WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
 
+# Bring in node_modules from deps
 COPY --from=deps /app/node_modules ./node_modules
+
+# Copy the rest of the source, including prisma/
 COPY . .
 
-# Build Next.js (App Router supported). Produces .next/standalone
+# Now that schema is present, run prisma generate
+# (Optional: if you build for prod, also run `npx prisma migrate deploy`)
+RUN npx prisma generate
+
+# Build Next.js
 RUN npm run build
 
-# -------- Runner layer (small, production-only) --------
+# -------- Runner layer --------
 FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-# Ensure Next binds to all interfaces in containers
-ENV HOSTNAME=0.0.0.0
+# Next.js required env for standalone output (if you use it)
 ENV PORT=3000
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
-
-# Copy the standalone server and static assets
-# After `output: 'standalone'`, Next puts a minimal Node server at .next/standalone/server.js
-COPY --from=builder /app/public ./public
+# Copy the standalone/optimized build
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+# If you’re not using standalone output, adjust to copy .next, public, etc.
 
-USER nextjs
+# Prisma engines (only if you query DB at runtime in server)
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
+# Public assets if your app serves them
+COPY --from=builder /app/public ./public
+
 EXPOSE 3000
-
-# Launch the Next standalone server
 CMD ["node", "server.js"]

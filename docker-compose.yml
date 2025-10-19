@@ -1,0 +1,36 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      # Override only in the container
+      DATABASE_URL: "file:/data/dev.db"
+      PRISMA_HIDE_UPDATE_MESSAGE: "true"
+      PRISMA_CLIENT_ENGINE_TYPE: "binary"
+    volumes:
+      - .:/app                    # mount your project
+      - node_modules:/app/node_modules
+      - prisma-db:/data           # where SQLite will be stored in the container
+    working_dir: /app
+    command: >
+      sh -lc '
+        echo "== Sanity check: does prisma/schema.prisma exist? ==" &&
+        if [ ! -f prisma/schema.prisma ]; then
+          echo "Missing prisma/schema.prisma. Current dir:" && pwd && echo "--- ls -la ---" && ls -la &&
+          echo "--- ls -la prisma ---" && ls -la prisma || true &&
+          exit 1
+        fi &&
+        npm ci &&
+        npx prisma generate --schema=./prisma/schema.prisma &&
+        npx prisma db push --schema=./prisma/schema.prisma &&
+        npm run dev
+      '
+
+volumes:
+  node_modules:
+  prisma-db:

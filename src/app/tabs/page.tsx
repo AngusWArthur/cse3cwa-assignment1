@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { toCssOnlyInteractiveHtml, textToHtml } from '@/lib/tabsExport';
 
 type Tab = { id: number; title: string; content: string };
 
@@ -24,24 +25,8 @@ function isTabArray(arr: unknown): arr is Tab[] {
   return Array.isArray(arr) && arr.every(isTab);
 }
 
-/* ---------- Helpers ---------- */
+/* ---------- LocalStorage bootstrap ---------- */
 
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, (m) =>
-    m === '&' ? '&amp;' :
-    m === '<' ? '&lt;' :
-    m === '>' ? '&gt;' :
-    m === '"' ? '&quot;' :
-    '&#39;'
-  );
-}
-
-/** Render plain text content to HTML with <br> for line breaks */
-function textToHtml(s: string) {
-  return escapeHtml(s).replace(/\r?\n/g, '<br>');
-}
-
-/** Load initial tabs from localStorage synchronously (with legacy key fallback) */
 function loadInitialTabs(): Tab[] {
   const fallback: Tab[] = [
     { id: 1, title: 'Overview', content: 'Welcome to the tabs demo.\nAdd more tabs and content.' },
@@ -77,118 +62,6 @@ function loadInitialTabs(): Tab[] {
   return fallback;
 }
 
-/**
- * Generate a standalone CSS-only interactive HTML document using radio+label technique.
- * No classes are used; selectors rely on element/attribute/ID only.
- *
- * Structure:
- *   <div id="{uid}">
- *     <input id="{uid}-tab-0" ... />
- *     <input id="{uid}-tab-1" ... />
- *     <div id="{uid}-list" role="tablist">
- *       <label for="{uid}-tab-0" role="tab" ...>...</label>
- *       ...
- *     </div>
- *     <section id="{uid}-panel-0" role="tabpanel" ...>...</section>
- *     ...
- *   </div>
- *
- * CSS uses:
- *   #{uid}-tab-i:checked ~ #{uid}-list label[for="#{uid}-tab-i"] { ... }     // style active label
- *   #{uid}-tab-i:focus   ~ #{uid}-list label[for="#{uid}-tab-i"] { ... }     // focus outline on label
- *   #{uid}-tab-i:checked ~ #{uid}-panel-i { display:block }                  // show matching panel
- */
-function toCssOnlyInteractiveHtml(
-  tabs: { title: string; content: string }[]
-): string {
-  const uid = 'tabs-' + Math.random().toString(36).slice(2);
-  const listId = `${uid}-list`;
-
-  const baseCss = `
-#${uid} { margin:16px }
-#${uid} [role="tablist"] { display:flex; gap:8px; flex-wrap:wrap }
-#${uid} input[type="radio"] { position:absolute; opacity:0; width:1px; height:1px; } /* keep focusable */
-#${uid} label[for] { padding:8px 12px; border:1px solid #0003; border-radius:8px; cursor:pointer }
-#${uid} [role="tabpanel"] { display:none; margin-top:12px; padding:12px; border:1px solid #0002; border-radius:8px }
-`.trim();
-
-  const activeLabelRules = tabs
-    .map((_, i) =>
-      `#${uid}-tab-${i}:checked ~ #${listId} label[for="${uid}-tab-${i}"] { border-bottom:2px solid #0a66c2 }`
-    )
-    .join('\n');
-
-  // Keyboard focus outline on the associated label when the hidden radio is focused
-  const focusLabelRules = tabs
-    .map((_, i) =>
-      `#${uid}-tab-${i}:focus ~ #${listId} label[for="${uid}-tab-${i}"] { outline:2px solid #ffbf47; outline-offset:2px }`
-    )
-    .join('\n');
-
-  const panelVisibilityRules = tabs
-    .map((_, i) =>
-      `#${uid}-tab-${i}:checked ~ #${uid}-panel-${i} { display:block }`
-    )
-    .join('\n');
-
-  const styleTag = `<style>
-${baseCss}
-${activeLabelRules}
-${focusLabelRules}
-${panelVisibilityRules}
-</style>`;
-
-  // radios first (siblings of list and panels)
-  const radios = tabs
-    .map((_, i) => {
-      const checked = i === 0 ? ' checked' : '';
-      return `  <input type="radio" name="${uid}-set" id="${uid}-tab-${i}"${checked} aria-controls="${uid}-panel-${i}" />`;
-    })
-    .join('\n');
-
-  // labels inside the tablist
-  const labels = tabs
-    .map((t, i) => {
-      const title = escapeHtml(t.title || `Tab ${i + 1}`);
-      return `      <label for="${uid}-tab-${i}" role="tab" aria-controls="${uid}-panel-${i}">${title}</label>`;
-    })
-    .join('\n');
-
-  // panels as siblings of radios and list
-  const panels = tabs
-    .map(
-      (t, i) => `  <section id="${uid}-panel-${i}" role="tabpanel" aria-labelledby="${uid}-tab-${i}">
-    ${textToHtml(t.content || '')}
-  </section>`
-    )
-    .join('\n\n');
-
-  const markup = [
-    `<div id="${uid}" role="region" aria-label="Tabs">`,
-    radios,
-    `  <div role="tablist" aria-label="Tabs" id="${listId}">`,
-    labels,
-    `  </div>`,
-    panels,
-    `</div>`,
-  ].join('\n');
-
-  return [
-    '<!doctype html>',
-    '<html lang="en">',
-    '<head>',
-    '  <meta charset="utf-8">',
-    '  <meta name="viewport" content="width=device-width, initial-scale=1">',
-    '  <title>Tabs</title>',
-    styleTag,
-    '</head>',
-    '<body>',
-    markup,
-    '</body>',
-    '</html>',
-  ].join('\n');
-}
-
 /* ---------- Page Component ---------- */
 
 export default function TabsPage() {
@@ -199,7 +72,12 @@ export default function TabsPage() {
   const [active, setActive] = useState(0);
   const [copied, setCopied] = useState(false);
 
-  // Save to localStorage on change
+  // Save-to-DB UI state
+  const [saveTitle, setSaveTitle] = useState<string>('');
+  const [saving, setSaving] = useState<boolean>(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+
+  // Persist to localStorage on change
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tabs)); } catch {}
   }, [tabs]);
@@ -251,6 +129,48 @@ export default function TabsPage() {
       setCopied(false);
     }
   };
+
+  // ---- Save to DB (Prisma API) ----
+  type TabDto = { id: number; title: string; content: string };
+  type CreateResponse = {
+    id: string;
+    title: string;
+    tabs: TabDto[];
+    html: string;
+    createdAt: string;
+    updatedAt: string;
+  };
+
+  async function saveToDb(): Promise<void> {
+    setSaving(true); setSaveMsg(null);
+    try {
+      const payload = {
+        title: (saveTitle || 'Untitled').trim(),
+        tabs: tabs.map<TabDto>(t => ({ id: t.id, title: t.title, content: t.content })),
+        html: htmlOutput,
+      };
+
+      const res = await fetch('/api/tabsets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const maybeError = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(maybeError.error || `HTTP ${res.status}`);
+      }
+
+      const created: CreateResponse = await res.json();
+      setSaveMsg(`Saved! Database record id=${created.id} created.`);
+      setSaveTitle('');
+    } catch (e) {
+      setSaveMsg(`Save failed: ${String(e)}`);
+    } finally {
+      setSaving(false);
+      setTimeout(() => setSaveMsg(null), 3500);
+    }
+  }
 
   /* ---------- Inline styles (theme-aware via CSS variables) ---------- */
   const card = {
@@ -428,7 +348,7 @@ export default function TabsPage() {
         ))}
       </section>
 
-      {/* Export: CSS-only interactive document + Copy */}
+      {/* Export: CSS-only interactive document + Copy + Save */}
       <section aria-labelledby="code" style={card}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
           <h2 id="code" style={{ margin: '0 0 10px 0' }}>Generated CSS-only Interactive HTML</h2>
@@ -444,6 +364,31 @@ export default function TabsPage() {
         <pre style={{ whiteSpace: 'pre-wrap', background: 'var(--bg)', padding: '12px', borderRadius: '8px', overflowX: 'auto' }}>
           <code>{htmlOutput}</code>
         </pre>
+
+        {/* Save to DB */}
+        <div style={{ marginTop: '16px', display: 'grid', gap: '8px', maxWidth: '560px' }}>
+          <label>
+            <span style={{ display: 'block', marginBottom: 4 }}>Save Title (for database)</span>
+            <input
+              value={saveTitle}
+              onChange={(e) => setSaveTitle(e.target.value)}
+              placeholder="e.g., My first tabs export"
+              style={input}
+              aria-label="Save title for this tab set"
+            />
+          </label>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={saveToDb}
+              disabled={saving || tabs.length === 0}
+              aria-label="Save to database"
+              style={{ ...btn, opacity: saving || tabs.length === 0 ? 0.6 : 1 }}
+            >
+              {saving ? 'Saving…' : 'Save to Database'}
+            </button>
+            {saveMsg && <span role="status" aria-live="polite">{saveMsg}</span>}
+          </div>
+        </div>
       </section>
     </>
   );
