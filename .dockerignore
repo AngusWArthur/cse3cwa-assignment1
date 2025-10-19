@@ -1,0 +1,22 @@
+# Dependencies & build outputs
+node_modules
+.next/cache
+.next/trace
+.next/types
+dist
+out
+
+# Local/host files
+.git
+.gitignore
+Dockerfile
+docker-compose.yml
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.vscode
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
