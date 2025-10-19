@@ -87,7 +87,7 @@ export default function Header() {
           {/* Centre: title */}
           <div className="header-center">
             <Link href="/" className="site-title" aria-label="Site home">
-              CSE3CWA Assignment 1
+              CSE3CWA Assignment 2
             </Link>
           </div>
 
