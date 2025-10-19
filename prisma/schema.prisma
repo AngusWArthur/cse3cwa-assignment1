@@ -1,0 +1,20 @@
+generator client {
+  provider = "prisma-client-js"
+
+  // If you build/run on Alpine (musl) or multi-arch Docker, add targets:
+  binaryTargets = ["native"]
+}
+
+datasource db {
+  provider = "sqlite"     // change to "postgresql" if you switch later
+  url      = env("DATABASE_URL")
+}
+
+model TabSet {
+  id        String   @id @default(uuid())
+  title     String
+  tabs      Json     // { id:number; title:string; content:string }[]
+  html      String   // exported HTML
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
