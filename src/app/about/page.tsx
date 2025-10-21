@@ -1,3 +1,5 @@
+import ReportViewer from '@/components/ReportViewer';
+
 export const metadata = { title: 'CSE3CWA - About' };
 
 function SectionCard(props: { id: string; title: string; children: React.ReactNode }) {

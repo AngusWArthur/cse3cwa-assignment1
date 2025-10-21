@@ -1,0 +1,7 @@
+{
+  "title": "JMeter smoke",
+  "tabs": [
+    { "id": 1, "title": "Overview", "content": "Hello from JMeter" }
+  ],
+  "html": "<!doctype html><html><body><h1>JMeter</h1></body></html>"
+}

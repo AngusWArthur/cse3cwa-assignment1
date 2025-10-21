@@ -10,7 +10,6 @@ const STORAGE_KEY = 'tabs_builder_v4';
 const LEGACY_KEYS = ['tabs_builder_v3', 'tabs_builder_v2'];
 
 /* ---------- Type Guards ---------- */
-
 function isTab(obj: unknown): obj is Tab {
   if (typeof obj !== 'object' || obj === null) return false;
   const o = obj as Record<string, unknown>;
@@ -20,62 +19,47 @@ function isTab(obj: unknown): obj is Tab {
     typeof o.content === 'string'
   );
 }
-
 function isTabArray(arr: unknown): arr is Tab[] {
   return Array.isArray(arr) && arr.every(isTab);
 }
 
-/* ---------- SSR-safe bootstrap ---------- */
+/* ---------- LocalStorage bootstrap ---------- */
+function loadInitialTabs(): Tab[] {
+  const fallback: Tab[] = [
+    { id: 1, title: 'Overview', content: 'Welcome to the tabs demo.\nAdd more tabs and content.' },
+  ];
+  if (typeof window === 'undefined') return fallback;
 
-// Keep server & first client render identical.
-const SSR_FALLBACK: Tab[] = [
-  { id: 1, title: 'Overview', content: 'Welcome to the tabs demo.\nAdd more tabs and content.' },
-];
-
-/**
- * Reads current or legacy keys *on the client only*. Never call during SSR.
- */
-function loadFromStorageOrLegacy(): Tab[] {
-  // Just in case this is ever called too early.
-  if (typeof window === 'undefined') return SSR_FALLBACK;
-
-  // Current key
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw) {
+  const raw = window.localStorage.getItem(STORAGE_KEY);
+  if (raw) {
+    try {
       const arr: unknown = JSON.parse(raw);
       if (isTabArray(arr)) {
         const trimmed = arr.slice(0, MAX_TABS);
-        return trimmed.length ? trimmed : SSR_FALLBACK;
-      }
-    }
-  } catch { /* ignore */ }
-
-  // Legacy keys
-  for (const k of LEGACY_KEYS) {
-    try {
-      const legacy = window.localStorage.getItem(k);
-      if (!legacy) continue;
-      const arr: unknown = JSON.parse(legacy);
-      if (isTabArray(arr)) {
-        const trimmed = arr.slice(0, MAX_TABS);
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed)); // migrate
-        return trimmed.length ? trimmed : SSR_FALLBACK;
+        return trimmed.length ? trimmed : fallback;
       }
     } catch { /* ignore */ }
   }
 
-  return SSR_FALLBACK;
+  for (const k of LEGACY_KEYS) {
+    const legacy = window.localStorage.getItem(k);
+    if (!legacy) continue;
+    try {
+      const arr: unknown = JSON.parse(legacy);
+      if (isTabArray(arr)) {
+        const trimmed = arr.slice(0, MAX_TABS);
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+        return trimmed.length ? trimmed : fallback;
+      }
+    } catch { /* ignore */ }
+  }
+
+  return fallback;
 }
 
-/* ---------- Page Component ---------- */
-
-export default function TabsPage() {
-  // 1) Start with SSR-safe fallback; hydrate to the same HTML.
-  const [tabs, setTabs] = useState<Tab[]>(SSR_FALLBACK);
-  const [mounted, setMounted] = useState(false);
-
-  // UI state
+/* ---------- Client Component ---------- */
+export default function ClientTabs() {
+  const [tabs, setTabs] = useState<Tab[]>(loadInitialTabs);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [active, setActive] = useState(0);
@@ -86,18 +70,9 @@ export default function TabsPage() {
   const [saving, setSaving] = useState<boolean>(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
-  // 2) After mount, load real tabs from storage (client-only).
   useEffect(() => {
-    const loaded = loadFromStorageOrLegacy();
-    setTabs(loaded);
-    setMounted(true);
-  }, []);
-
-  // 3) Persist to localStorage when tabs change (client-only).
-  useEffect(() => {
-    if (!mounted) return; // avoid touching storage during SSR hydration
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tabs)); } catch {}
-  }, [tabs, mounted]);
+  }, [tabs]);
 
   const canAdd = tabs.length < MAX_TABS;
 
@@ -109,7 +84,7 @@ export default function TabsPage() {
     ]);
     setTitle('');
     setContent('');
-    setActive(tabs.length); // focus new tab index
+    setActive(tabs.length);
   };
 
   const updateTabTitle = (id: number, v: string) =>
@@ -131,17 +106,10 @@ export default function TabsPage() {
     });
   };
 
-  // Exported HTML (CSS-only interactive). Only compute when mounted to avoid
-  // any random/Date usage during the initial server render.
-  const htmlOutput = useMemo(() => {
-    if (!mounted) return '';
-    const bare = tabs
-      .slice(0, MAX_TABS)
-      .map(({ title, content }) => ({ title, content }));
-    // If your exporter uses Math.random() internally, hiding this block until
-    // mount prevents hydration mismatches.
-    return toCssOnlyInteractiveHtml(bare);
-  }, [tabs, mounted]);
+  const htmlOutput = useMemo(
+    () => toCssOnlyInteractiveHtml(tabs.slice(0, MAX_TABS).map(({ title, content }) => ({ title, content }))),
+    [tabs]
+  );
 
   const copyAll = async () => {
     try {
@@ -195,7 +163,7 @@ export default function TabsPage() {
     }
   }
 
-  /* ---------- Inline styles (theme-aware via CSS variables) ---------- */
+  /* ---------- Inline styles ---------- */
   const card = {
     border: '1px solid var(--fg)',
     borderRadius: '10px',
@@ -337,7 +305,7 @@ export default function TabsPage() {
         </ul>
       </section>
 
-      {/* Live preview (React state, inline styles only) */}
+      {/* Live preview */}
       <section aria-labelledby="rendered" style={card}>
         <h2 id="rendered" style={{ margin: '0 0 10px 0' }}>Rendered Preview</h2>
 
@@ -371,51 +339,48 @@ export default function TabsPage() {
         ))}
       </section>
 
-      {/* Export: CSS-only interactive document + Copy + Save
-          NOTE: Render this only once mounted to avoid hydration mismatches. */}
-      {mounted && (
-        <section aria-labelledby="code" style={card}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-            <h2 id="code" style={{ margin: '0 0 10px 0' }}>Generated CSS-only Interactive HTML</h2>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button onClick={copyAll} style={btn} aria-label="Copy exported HTML">
-                {copied ? 'Copied!' : 'Copy'}
-              </button>
-            </div>
+      {/* Export + Save */}
+      <section aria-labelledby="code" style={card}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+          <h2 id="code" style={{ margin: '0 0 10px 0' }}>Generated CSS-only Interactive HTML</h2>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={copyAll} style={btn} aria-label="Copy exported HTML">
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
           </div>
-          <p style={{ marginTop: 0 }}>
-            Copy all of the code below into a blank file, save it as <code>Hello.html</code>, and open it in your browser.
-          </p>
-          <pre style={{ whiteSpace: 'pre-wrap', background: 'var(--bg)', padding: '12px', borderRadius: '8px', overflowX: 'auto' }}>
-            <code>{htmlOutput}</code>
-          </pre>
+        </div>
+        <p style={{ marginTop: 0 }}>
+          Copy all of the code below into a blank file, save it as <code>Hello.html</code>, and open it in your browser.
+        </p>
+        <pre style={{ whiteSpace: 'pre-wrap', background: 'var(--bg)', padding: '12px', borderRadius: '8px', overflowX: 'auto' }}>
+          <code>{htmlOutput}</code>
+        </pre>
 
-          {/* Save to DB */}
-          <div style={{ marginTop: '16px', display: 'grid', gap: '8px', maxWidth: '560px' }}>
-            <label>
-              <span style={{ display: 'block', marginBottom: 4 }}>Save Title (for database)</span>
-              <input
-                value={saveTitle}
-                onChange={(e) => setSaveTitle(e.target.value)}
-                placeholder="e.g., My first tabs export"
-                style={input}
-                aria-label="Save title for this tab set"
-              />
-            </label>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                onClick={saveToDb}
-                disabled={saving || tabs.length === 0}
-                aria-label="Save to database"
-                style={{ ...btn, opacity: saving || tabs.length === 0 ? 0.6 : 1 }}
-              >
-                {saving ? 'Saving…' : 'Save to Database'}
-              </button>
-              {saveMsg && <span role="status" aria-live="polite">{saveMsg}</span>}
-            </div>
+        {/* Save to DB */}
+        <div style={{ marginTop: '16px', display: 'grid', gap: '8px', maxWidth: '560px' }}>
+          <label>
+            <span style={{ display: 'block', marginBottom: 4 }}>Save Title (for database)</span>
+            <input
+              value={saveTitle}
+              onChange={(e) => setSaveTitle(e.target.value)}
+              placeholder="e.g., My first tabs export"
+              style={input}
+              aria-label="Save title for this tab set"
+            />
+          </label>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={saveToDb}
+              disabled={saving || tabs.length === 0}
+              aria-label="Save to database"
+              style={{ ...btn, opacity: saving || tabs.length === 0 ? 0.6 : 1 }}
+            >
+              {saving ? 'Saving…' : 'Save to Database'}
+            </button>
+            {saveMsg && <span role="status" aria-live="polite">{saveMsg}</span>}
           </div>
-        </section>
-      )}
+        </div>
+      </section>
     </>
   );
 }
