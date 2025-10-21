@@ -1,57 +1,46 @@
-import prisma from '@/lib/prisma';
+// src/app/api/tabsets/[id]/route.ts
 import { NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
 import type { Prisma } from '@prisma/client';
 
 export const runtime = 'nodejs';
 
-type RouteContext = { params: { id: string } };
+// Next 15: params is a Promise<{ id: string }>
+type ParamCtx = { params: Promise<{ id: string }> };
 
-type IncomingTab = { id: number; title: string; content: string };
-function isIncomingTabArray(v: unknown): v is IncomingTab[] {
-  return Array.isArray(v) && v.every((t: unknown) => {
-    if (typeof t !== 'object' || t === null) return false;
-    const o = t as { id: unknown; title: unknown; content: unknown };
-    return typeof o.id === 'number' &&
-           typeof o.title === 'string' &&
-           typeof o.content === 'string';
-  });
-}
+export async function GET(_req: Request, ctx: ParamCtx) {
+  const { id } = await ctx.params;
 
-export async function GET(_req: Request, { params }: RouteContext) {
-  const row = await prisma.tabSet.findUnique({ where: { id: params.id } });
+  const row = await prisma.tabSet.findUnique({ where: { id } });
   if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
   return NextResponse.json(row);
 }
 
-type PutBody = Partial<{ title: string; tabs: unknown; html: string }>;
+export async function PUT(req: Request, ctx: ParamCtx) {
+  const { id } = await ctx.params;
+  const body = await req.json().catch(() => ({} as Record<string, unknown>));
 
-export async function PUT(req: Request, { params }: RouteContext) {
-  const body = (await req.json().catch(() => ({}))) as PutBody;
+  // Build a typed, partial update payload
+  const data: { title?: string; tabs?: Prisma.InputJsonValue; html?: string } = {};
 
-  const updates: Prisma.TabSetUpdateInput = {};
-
-  if (typeof body.title === 'string') updates.title = body.title.trim();
-
-  if (body.tabs !== undefined) {
-    if (!isIncomingTabArray(body.tabs)) {
-      return NextResponse.json({ error: 'Invalid tabs array' }, { status: 400 });
-    }
-    updates.tabs = body.tabs as unknown as Prisma.InputJsonValue;
-  }
-
-  if (typeof body.html === 'string') updates.html = body.html;
+  if (typeof body.title === 'string') data.title = body.title.trim();
+  if (Array.isArray(body.tabs)) data.tabs = body.tabs as Prisma.InputJsonValue;
+  if (typeof body.html === 'string') data.html = body.html;
 
   try {
-    const row = await prisma.tabSet.update({ where: { id: params.id }, data: updates });
+    const row = await prisma.tabSet.update({ where: { id }, data });
     return NextResponse.json(row);
   } catch {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 }
 
-export async function DELETE(_req: Request, { params }: RouteContext) {
+export async function DELETE(_req: Request, ctx: ParamCtx) {
+  const { id } = await ctx.params;
+
   try {
-    await prisma.tabSet.delete({ where: { id: params.id } });
+    await prisma.tabSet.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
