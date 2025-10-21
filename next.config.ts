@@ -1,14 +1,14 @@
+// next.config.ts
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Produce .next/standalone for the Docker image
   output: "standalone",
 
-  // Optionally: do NOT fail production builds on ESLint warnings/errors.
-  // If you prefer to FIX ESLint instead (see Step 2), you can remove this.
-  eslint: { ignoreDuringBuilds: false },
+  // If you want builds to proceed even with ESLint issues, set this to true.
+  // eslint: { ignoreDuringBuilds: true },
 
-  // Optional: if you deploy behind a plain file server, you can disable image optimization.
+  // If you deploy behind a plain file server and don’t need Next Image optimization:
   // images: { unoptimized: true },
 };
 
