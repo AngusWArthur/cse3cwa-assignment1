@@ -22,6 +22,43 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## View Docker image
+```bash
+docker compose build
+docker compose up
+```
+
+## View Database Tabsets
+-- With environment running
+
+# Via API
+Go to http://localhost:3000/api/tabsets
+
+# Via Prisma Studio
+```bash
+docker compose up -d #or while environment running
+docker compose exec web sh -lc 'npx prisma studio --port 5555 --hostname 0.0.0.0'
+# this will open the Prisma GUI at port 5555
+
+```
+
+## Vitest Tests - Unit Tests
+```bash
+# does not require server to be running
+npm run test
+```
+
+## Playwright Tests - End to End Browser Tests
+```bash
+# will require server (dev/docker/prod) to be running
+# install browsers once
+npx playwright install
+
+# run headless
+npm run test:e2e
+```
+
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

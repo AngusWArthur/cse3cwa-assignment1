@@ -11,5 +11,6 @@ export default defineConfig({
   test: {
     environment: 'node',             // your a11y test creates its own JSDOM
     include: ['tests/**/*.spec.ts'],
+    exclude: ['tests/e2e/**', 'node_modules/**', '.next/**'],
   },
 });

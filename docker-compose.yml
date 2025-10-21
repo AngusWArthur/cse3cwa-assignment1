@@ -6,6 +6,7 @@ services:
       target: builder
     ports:
       - "3000:3000"
+      - "5555:5555"  # for Prisma Studio
     env_file: .env
     environment:
       # Override only in the container
