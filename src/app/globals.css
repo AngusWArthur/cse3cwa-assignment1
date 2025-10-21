@@ -110,3 +110,21 @@ a:focus, button:focus { outline: 3px solid var(--focus); outline-offset: 2px; }
 .main { max-width: 1120px; margin: 0 auto; padding: 20px 16px; }
 .footer { background: var(--card); border-top: 1px solid #00000020; }
 .footer-inner { max-width: 1120px; margin: 0 auto; padding: 16px; font-size: 0.95rem; color: var(--muted); }
+
+/* Align exactly with the header-inner edges (max-width + 16px side padding) */
+.section-wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+/* (Optional) If you STILL want a full-width background without content overhang: 
+   put your background on this element, but keep content aligned via .section-wrap inside */
+.full-bleed-bg {
+  /* Avoid the 100vw scrollbar trap by using small/large viewport units when available */
+  /* Fallback to 100% so it never exceeds the viewport with a scrollbar */
+  width: 100%;
+  /* Prevent accidental horizontal scrolling */
+  overflow-x: hidden;
+}

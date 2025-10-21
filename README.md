@@ -1,4 +1,4 @@
-This code was written with the assistance of ChatGPT which helped provide the layout and the basic features for the site and which I then put tailored.
+This code was written with the assistance of ChatGPT which helped provide the layout and the basic features for the site and which I then tailored.
 
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
